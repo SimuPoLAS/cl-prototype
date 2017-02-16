@@ -1,7 +1,16 @@
 #include <iostream>
 #include <vector>
+#include <string>
 
 #include <CL/cl.h>
+
+std::string source = R"(
+__kernel void SAXPY (__global float* a, __global float* b, float two)
+{
+    const int i = get_global_id(0);
+    b[i] += two * a[i];
+}
+)";
 
 int main(int argc, char const *argv[])
 {
@@ -76,6 +85,189 @@ int main(int argc, char const *argv[])
     }
 
     std::cout << "context created" << '\n';
+
+    // create program
+    size_t lengths[] = { source.size() };
+    const char* sources[] = { source.c_str() };
+
+    cl_program program = clCreateProgramWithSource
+    (
+        context,
+        1,
+        sources,
+        lengths,
+        &error
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at program creation" << '\n';
+        exit(1);
+    }
+
+    std::cout << "program created" << '\n';
+
+    // build program
+    error = clBuildProgram
+    (
+        program,
+        deviceIdCount,
+        deviceIds.data(),
+        nullptr,
+        nullptr,
+        nullptr
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at program building" << '\n';
+        exit(1);
+    }
+
+    std::cout << "program built" << '\n';
+
+    // create kernel
+    cl_kernel kernel = clCreateKernel(program, "SAXPY", &error);
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at kernel creation" << '\n';
+        exit(1);
+    }
+
+    std::cout << "kernel created" << '\n';
+
+    // prepare some test data
+    const size_t testDataSize = 5;
+    std::vector<float> a(testDataSize), b(testDataSize);
+    for (size_t i = 0; i < testDataSize; i++)
+    {
+        a [i] = static_cast<float> (5);
+        b [i] = static_cast<float> (6 + i);
+    }
+
+    // create buffers
+
+    // buffer a creation
+    cl_mem aBuffer = clCreateBuffer
+    (
+        context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        sizeof(float) * testDataSize,
+        a.data(),
+        &error
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at buffer a creation" << '\n';
+        exit(1);
+    }
+
+    std::cout << "buffer a created" << '\n';
+
+    // buffer b creation
+    cl_mem bBuffer = clCreateBuffer
+    (
+        context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        sizeof(float) * testDataSize,
+        b.data(),
+        &error
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at buffer b creation" << '\n';
+        exit(1);
+    }
+
+    std::cout << "buffer b created" << '\n';
+
+    // create command queue
+    // TODO: use clCreateCommandQueueWithProperties in future
+    cl_command_queue queue = clCreateCommandQueue
+    (
+        context,
+        deviceIds[0],
+        0,
+        &error
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at command queue creation" << '\n';
+        exit(1);
+    }
+
+    std::cout << "command queue created" << '\n';
+
+    // set args
+    clSetKernelArg(kernel, 0, sizeof(cl_mem), &aBuffer);
+    clSetKernelArg(kernel, 1, sizeof(cl_mem), &bBuffer);
+    static const float two = 2.0f;
+    clSetKernelArg(kernel, 2, sizeof(float), &two);
+
+    // run code
+    const size_t globalWorkSize[] = { testDataSize, 0, 0 };
+
+    error = clEnqueueNDRangeKernel
+    (
+        queue,
+        kernel,
+        1,
+        nullptr,
+        globalWorkSize,
+        nullptr,
+        0,
+        nullptr,
+        nullptr
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at running code" << '\n';
+        exit(1);
+    }
+
+    std::cout << "command run" << '\n';
+
+    // reading results
+    error = clEnqueueReadBuffer
+    (
+        queue,
+        bBuffer,
+        CL_TRUE,
+        0,
+        sizeof(float) * testDataSize,
+        b.data(),
+        0,
+        nullptr,
+        nullptr
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at reading results" << '\n';
+        exit(1);
+    }
+
+    std::cout << "results read" << '\n';
+
+    std::cout << "results:" << '\n';
+
+    for (size_t i = 0; i < testDataSize; i++)
+    {
+        std::cout << std::to_string(b[i]) << '\n';
+    }
+
+    clReleaseCommandQueue(queue);
+
+    clReleaseMemObject(bBuffer);
+    clReleaseMemObject(aBuffer);
+
+    clReleaseKernel(kernel);
+    clReleaseProgram(program);
 
     clReleaseContext(context);
 
