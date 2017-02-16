@@ -51,6 +51,7 @@ int main(int argc, char const *argv[])
         nullptr
     );
 
+    // check devices count
     if (deviceIds.size() == 0)
     {
         std::cout << "no devices found" << '\n';
@@ -58,6 +59,27 @@ int main(int argc, char const *argv[])
     }
 
     std::cout << "devices found: " << deviceIdCount << '\n';
+
+    std::cout << "devices: " << '\n';
+    // nameing devices
+    for(size_t i = 0; i < deviceIdCount; i++)
+    {
+        size_t size = 0;
+        clGetDeviceInfo(deviceIds[i], CL_DEVICE_NAME, 0, nullptr, &size);
+
+        std::string result;
+        result.resize(size);
+        clGetDeviceInfo
+        (
+            deviceIds[i],
+            CL_DEVICE_NAME,
+            size,
+            const_cast<char*>(result.data()),
+            nullptr
+        );
+
+        std::cout << std::to_string(i) << ": " << result << '\n';
+    }
 
     // create context
     const cl_context_properties contextProperties[] =
