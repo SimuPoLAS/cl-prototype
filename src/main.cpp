@@ -5,10 +5,18 @@
 #include <CL/cl.h>
 
 std::string source = R"(
-__kernel void SAXPY (__global float* a, __global float* b, float two)
+typedef struct __attribute__ ((packed)) _node
+{
+    int value;
+    int children[8];
+} node;
+
+__kernel void SAXPY (__global float* a, __global float* b, __global node* nodes)
 {
     const int i = get_global_id(0);
-    b[i] += two * a[i];
+    //int childID = nodes[0].children[0];
+    int childID = 0;
+    b[i] += a[i] + nodes[childID].value;
 }
 )";
 
@@ -206,6 +214,33 @@ int main(int argc, char const *argv[])
 
     std::cout << "buffer b created" << '\n';
 
+    // prepare data for n buffer
+    typedef struct __attribute__ ((packed)) _node
+    {
+        int value;
+        int children[8];
+    } node;
+
+    node nodes[] = { node { 10, { 1 } }, node { 20, { } } };
+
+    // buffer n creation
+    cl_mem nBuffer = clCreateBuffer
+    (
+        context,
+        CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+        sizeof(node) * sizeof(nodes),
+        nodes,
+        &error
+    );
+
+    if (error != CL_SUCCESS)
+    {
+        std::cout << "errors occured at buffer n creation" << '\n';
+        exit(1);
+    }
+
+    std::cout << "buffer n created" << '\n';
+
     // create command queue
     // TODO: use clCreateCommandQueueWithProperties in future
     cl_command_queue queue = clCreateCommandQueue
@@ -227,8 +262,7 @@ int main(int argc, char const *argv[])
     // set args
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &aBuffer);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &bBuffer);
-    static const float two = 2.0f;
-    clSetKernelArg(kernel, 2, sizeof(float), &two);
+    clSetKernelArg(kernel, 2, sizeof(cl_mem), &nBuffer);
 
     // run code
     const size_t globalWorkSize[] = { testDataSize, 0, 0 };
